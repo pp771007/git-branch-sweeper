@@ -1,7 +1,6 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, Listbox, Scrollbar, END
+from tkinter import filedialog, messagebox, Listbox, Scrollbar, END
 import json
-import os
 import git
 
 class GitBranchDeleter:
@@ -86,7 +85,7 @@ class GitBranchDeleter:
             current_branch = repo.active_branch.name  # 取得目前的分支名稱
             for branch in branches:
                 if branch == current_branch:
-                    self.branch_listbox.insert(tk.END, f"* {branch}")  # 目前選擇的分支名稱前面加上星號（*）
+                    self.branch_listbox.insert(tk.END, f"* {branch} (當前分支)")  # 目前選擇的分支名稱強調顯示(與delete_selected_branches對應)
                 else:
                     self.branch_listbox.insert(tk.END, branch)
         except git.exc.InvalidGitRepositoryError:
@@ -106,7 +105,7 @@ class GitBranchDeleter:
         for index in selected_indices:
             branch_name = self.branch_listbox.get(index)
             if branch_name.startswith("*"):
-                continue  # 如果分支名稱以 * 開頭，跳過刪除操作
+                continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作(與load_branches對應)
             repo.git.branch("-D", branch_name)
         
         self.load_branches(folder_path)
