@@ -54,7 +54,8 @@ class GitBranchDeleter:
         folder_selected = filedialog.askdirectory()
         if folder_selected:
             try:
-                repo = git.Repo(folder_selected)
+                # 檢查資料夾是否為有效的 Git 儲存庫
+                git.Repo(folder_selected)
                 # 檢查資料夾是否已存在於列表中
                 if folder_selected not in self.folder_list:
                     self.folder_list.append(folder_selected)
