@@ -7,7 +7,7 @@ class GitBranchDeleter:
     def __init__(self, root):
         self.root = root
         self.root.title("GIT 分支批次刪除助手")
-        self.root.geometry("600x470")
+        self.root.geometry("600x500")
         
         # 資料夾列表
         self.folder_list = []
@@ -43,6 +43,10 @@ class GitBranchDeleter:
         # 刪除分支按鈕
         delete_branch_btn = tk.Button(self.root, text="刪除所選分支", command=self.delete_selected_branches)
         delete_branch_btn.pack(pady=10)
+
+        # 新增推送分支按鈕
+        push_branch_btn = tk.Button(self.root, text="推送所選分支", command=self.push_selected_branches)
+        push_branch_btn.pack(pady=10)
 
         # 視窗關閉事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -86,7 +90,7 @@ class GitBranchDeleter:
             current_branch = repo.active_branch.name  # 取得目前的分支名稱
             for branch in branches:
                 if branch == current_branch:
-                    self.branch_listbox.insert(tk.END, f"* {branch} (當前分支)")  # 目前選擇的分支名稱強調顯示(與delete_selected_branches對應)
+                    self.branch_listbox.insert(tk.END, f"* {branch} (當前分支)")  # 目前選擇的分支名稱強調顯示
                 else:
                     self.branch_listbox.insert(tk.END, branch)
         except git.exc.InvalidGitRepositoryError:
@@ -106,10 +110,27 @@ class GitBranchDeleter:
         for index in selected_indices:
             branch_name = self.branch_listbox.get(index)
             if branch_name.startswith("*"):
-                continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作(與load_branches對應)
+                continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作
             repo.git.branch("-D", branch_name)
         
         self.load_branches(folder_path)
+
+    def push_selected_branches(self):
+        selected_indices = self.branch_listbox.curselection()
+        if not selected_indices:
+            return
+
+        folder_index = self.folder_listbox.curselection()[0]
+        folder_path = self.folder_list[folder_index]
+
+        repo = git.Repo(folder_path)
+        for index in selected_indices:
+            branch_name = self.branch_listbox.get(index).replace("* ", "").replace(" (當前分支)", "")
+            try:
+                repo.git.push("-u", "origin", branch_name)
+                messagebox.showinfo("成功", f"已成功推送分支：{branch_name}")
+            except git.exc.GitCommandError as e:
+                messagebox.showerror("推送錯誤", f"無法推送分支 {branch_name}：{e}")
 
     def on_closing(self):
         # 關閉視窗時存檔
