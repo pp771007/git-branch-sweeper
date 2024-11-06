@@ -31,6 +31,11 @@ class GitBranchDeleter:
         self.folder_listbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.folder_listbox.yview)
         self.folder_listbox.bind('<ButtonRelease-1>', self.set_target_folder)
+            
+        # 新增右鍵選單
+        self.folder_menu = tk.Menu(self.root, tearoff=0)
+        self.folder_menu.add_command(label="刪除", command=self.delete_folder)
+        self.folder_listbox.bind('<Button-3>', self.show_folder_menu)
 
         # 目標資料夾的分支列表 Listbox
         self.branch_listbox = Listbox(self.root, selectmode=tk.EXTENDED, exportselection=False, height=15)
@@ -54,6 +59,29 @@ class GitBranchDeleter:
         # 綁定視窗大小變化事件
         self.root.bind("<Configure>", self.on_resize)
 
+    def show_folder_menu(self, event):
+        # 確保點擊位置的項目被選中
+        self.folder_listbox.selection_clear(0, tk.END)
+        clicked_index = self.folder_listbox.nearest(event.y)
+        self.folder_listbox.selection_set(clicked_index)
+        
+        # 顯示選單
+        try:
+            self.folder_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.folder_menu.grab_release()
+
+    def delete_folder(self):
+        selection = self.folder_listbox.curselection()
+        if selection:
+            index = selection[0]
+            folder_path = self.folder_list[index]
+            if messagebox.askyesno("確認刪除", f"確定要從列表中移除此資料夾嗎？\n{folder_path}"):
+                self.folder_list.pop(index)
+                self.update_folder_listbox()
+                # 清空分支列表
+                self.branch_listbox.delete(0, tk.END)
+                
     def choose_folder(self):
         folder_selected = filedialog.askdirectory()
         if folder_selected:
