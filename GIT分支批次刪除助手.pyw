@@ -52,6 +52,10 @@ class GitBranchDeleter:
         # 新增推送分支按鈕
         push_branch_btn = tk.Button(self.root, text="推送所選分支", command=self.push_selected_branches)
         push_branch_btn.pack(pady=10)
+            
+        # 新增顯示推送結果標籤
+        self.push_result_label = tk.Label(self.root, text="", fg="green")
+        self.push_result_label.pack(pady=5)
 
         # 視窗關閉事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -152,13 +156,29 @@ class GitBranchDeleter:
         folder_path = self.folder_list[folder_index]
 
         repo = git.Repo(folder_path)
+        success_branches = []
+        failed_branches = []
+
         for index in selected_indices:
             branch_name = self.branch_listbox.get(index).replace("* ", "").replace(" (當前分支)", "")
             try:
                 repo.git.push("-u", "origin", branch_name)
-                messagebox.showinfo("成功", f"已成功推送分支：{branch_name}")
+                success_branches.append(branch_name)
             except git.exc.GitCommandError as e:
-                messagebox.showerror("推送錯誤", f"無法推送分支 {branch_name}：{e}")
+                failed_branches.append(branch_name)
+
+        # 更新結果標籤
+        if success_branches and not failed_branches:
+            self.push_result_label.config(text=f"成功推送分支: {', '.join(success_branches)}", fg="green")
+        elif failed_branches and not success_branches:
+            self.push_result_label.config(text=f"推送失敗分支: {', '.join(failed_branches)}", fg="red")
+        elif success_branches and failed_branches:
+            self.push_result_label.config(
+                text=f"成功推送分支: {', '.join(success_branches)}\n失敗分支: {', '.join(failed_branches)}",
+                fg="orange"
+            )
+        else:
+            self.push_result_label.config(text="", fg="green")
 
     def on_closing(self):
         # 關閉視窗時存檔
