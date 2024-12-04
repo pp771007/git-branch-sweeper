@@ -21,7 +21,7 @@ for %%i in (*.ico) do (
 rem 使用pyinstaller生成可執行檔，指定自訂圖示
 if defined custom_icon (
 	echo 有找到圖示檔: "!custom_icon!"
-    pyinstaller --onefile --icon=!custom_icon! "!py_file!"
+    pyinstaller --onefile --add-data "!custom_icon!;." --icon=!custom_icon! "!py_file!"
 ) else (
     rem 使用pyinstaller生成可執行檔，不指定圖示
     pyinstaller --onefile --noconsole "!py_file!"

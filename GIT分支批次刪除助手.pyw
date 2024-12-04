@@ -2,12 +2,27 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, Listbox, Scrollbar, END
 import json
 import git
+import os
+import sys
 
 class GitBranchDeleter:
     def __init__(self, root):
         self.root = root
         self.root.title("GIT 分支批次刪除助手")
         self.root.geometry("600x500")
+        
+        # 檢查是否在 PyInstaller 打包的環境中運行
+        if getattr(sys, 'frozen', False):
+            # 獲取打包後的應用程序路徑
+            icon_path = os.path.join(sys._MEIPASS, "favicon.ico")
+        else:
+            # 開發模式下的圖標路徑
+            icon_path = "favicon.ico"
+
+        # 檢查圖標文件是否存在
+        if os.path.exists(icon_path):
+            # 如果文件存在，設置應用程式窗口的圖標
+            self.root.iconbitmap(icon_path)
         
         # 資料夾列表
         self.folder_list = []
