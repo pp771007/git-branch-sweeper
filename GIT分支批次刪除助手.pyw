@@ -4,12 +4,14 @@ import json
 import git
 import os
 import sys
+import threading
+import queue
 
 class GitBranchDeleter:
     def __init__(self, root):
         self.root = root
         self.root.title("GIT 分支批次刪除助手")
-        self.root.geometry("600x500")
+        self.root.geometry("600x550")
         
         # 檢查是否在 PyInstaller 打包的環境中運行
         if getattr(sys, 'frozen', False):
@@ -27,11 +29,43 @@ class GitBranchDeleter:
         # 資料夾列表
         self.folder_list = []
         
+        # 創建隊列
+        self.queue = queue.Queue()
+        
         # 設定 UI
         self.setup_ui()
         
         # 加載上次存檔的資料
         self.load_saved_data()
+        
+        # 定期檢查隊列
+        self.root.after(100, self.process_queue)
+
+    def process_queue(self):
+        try:
+            while True:
+                msg = self.queue.get_nowait()
+                if msg[0] == 'delete':
+                    self.load_branches(msg[1])
+                elif msg[0] == 'push_result':
+                    success_branches, failed_branches = msg[1], msg[2]
+                    if success_branches and not failed_branches:
+                        self.push_result_label.config(text=f"成功推送分支: {', '.join(success_branches)}", fg="green")
+                    elif failed_branches and not success_branches:
+                        self.push_result_label.config(text=f"推送失敗分支: {', '.join(failed_branches)}", fg="red")
+                    elif success_branches and failed_branches:
+                        self.push_result_label.config(
+                            text=f"成功推送分支: {', '.join(success_branches)}\n失敗分支: {', '.join(failed_branches)}",
+                            fg="orange"
+                        )
+                    else:
+                        self.push_result_label.config(text="", fg="green")
+                elif msg[0] == 'error':
+                    messagebox.showerror("錯誤", msg[1])
+        except queue.Empty:
+            pass
+        finally:
+            self.root.after(100, self.process_queue)
 
     def setup_ui(self):
         # 選擇資料夾按鈕
@@ -78,6 +112,58 @@ class GitBranchDeleter:
         # 綁定視窗大小變化事件
         self.root.bind("<Configure>", self.on_resize)
 
+    def delete_selected_branches(self):
+        def delete_branches_thread():
+            try:
+                selected_indices = self.branch_listbox.curselection()
+                if not selected_indices:
+                    return
+                
+                folder_index = self.folder_listbox.curselection()[0]
+                folder_path = self.folder_list[folder_index]
+
+                repo = git.Repo(folder_path)
+                for index in selected_indices:
+                    branch_name = self.branch_listbox.get(index)
+                    if branch_name.startswith("*"):
+                        continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作
+                    repo.git.branch("-D", branch_name)
+                
+                self.queue.put(('delete', folder_path))
+            except Exception as e:
+                self.queue.put(('error', str(e)))
+
+        threading.Thread(target=delete_branches_thread, daemon=True).start()
+
+    def push_selected_branches(self):
+        def push_branches_thread():
+            try:
+                selected_indices = self.branch_listbox.curselection()
+                if not selected_indices:
+                    return
+
+                folder_index = self.folder_listbox.curselection()[0]
+                folder_path = self.folder_list[folder_index]
+
+                repo = git.Repo(folder_path)
+                success_branches = []
+                failed_branches = []
+
+                for index in selected_indices:
+                    branch_name = self.branch_listbox.get(index).replace("* ", "").replace(" (當前分支)", "")
+                    try:
+                        repo.git.push("-u", "origin", branch_name)
+                        success_branches.append(branch_name)
+                    except git.exc.GitCommandError as e:
+                        failed_branches.append(branch_name)
+
+                self.queue.put(('push_result', success_branches, failed_branches))
+            except Exception as e:
+                self.queue.put(('error', str(e)))
+
+        threading.Thread(target=push_branches_thread, daemon=True).start()
+
+    # 其餘方法保持不變
     def show_folder_menu(self, event):
         # 確保點擊位置的項目被選中
         self.folder_listbox.selection_clear(0, tk.END)
@@ -144,56 +230,6 @@ class GitBranchDeleter:
             messagebox.showerror("錯誤", "此資料夾不是有效的 Git 儲存庫。")
             self.folder_list.remove(folder_path)
             self.update_folder_listbox()
-
-    def delete_selected_branches(self):
-        selected_indices = self.branch_listbox.curselection()
-        if not selected_indices:
-            return
-        
-        folder_index = self.folder_listbox.curselection()[0]
-        folder_path = self.folder_list[folder_index]
-
-        repo = git.Repo(folder_path)
-        for index in selected_indices:
-            branch_name = self.branch_listbox.get(index)
-            if branch_name.startswith("*"):
-                continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作
-            repo.git.branch("-D", branch_name)
-        
-        self.load_branches(folder_path)
-
-    def push_selected_branches(self):
-        selected_indices = self.branch_listbox.curselection()
-        if not selected_indices:
-            return
-
-        folder_index = self.folder_listbox.curselection()[0]
-        folder_path = self.folder_list[folder_index]
-
-        repo = git.Repo(folder_path)
-        success_branches = []
-        failed_branches = []
-
-        for index in selected_indices:
-            branch_name = self.branch_listbox.get(index).replace("* ", "").replace(" (當前分支)", "")
-            try:
-                repo.git.push("-u", "origin", branch_name)
-                success_branches.append(branch_name)
-            except git.exc.GitCommandError as e:
-                failed_branches.append(branch_name)
-
-        # 更新結果標籤
-        if success_branches and not failed_branches:
-            self.push_result_label.config(text=f"成功推送分支: {', '.join(success_branches)}", fg="green")
-        elif failed_branches and not success_branches:
-            self.push_result_label.config(text=f"推送失敗分支: {', '.join(failed_branches)}", fg="red")
-        elif success_branches and failed_branches:
-            self.push_result_label.config(
-                text=f"成功推送分支: {', '.join(success_branches)}\n失敗分支: {', '.join(failed_branches)}",
-                fg="orange"
-            )
-        else:
-            self.push_result_label.config(text="", fg="green")
 
     def on_closing(self):
         # 關閉視窗時存檔
