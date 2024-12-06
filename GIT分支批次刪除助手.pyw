@@ -47,19 +47,8 @@ class GitBranchDeleter:
                 msg = self.queue.get_nowait()
                 if msg[0] == 'delete':
                     self.load_branches(msg[1])
-                elif msg[0] == 'push_result':
-                    success_branches, failed_branches = msg[1], msg[2]
-                    if success_branches and not failed_branches:
-                        self.push_result_label.config(text=f"成功推送分支: {', '.join(success_branches)}", fg="green")
-                    elif failed_branches and not success_branches:
-                        self.push_result_label.config(text=f"推送失敗分支: {', '.join(failed_branches)}", fg="red")
-                    elif success_branches and failed_branches:
-                        self.push_result_label.config(
-                            text=f"成功推送分支: {', '.join(success_branches)}\n失敗分支: {', '.join(failed_branches)}",
-                            fg="orange"
-                        )
-                    else:
-                        self.push_result_label.config(text="", fg="green")
+                elif msg[0] == 'update_result_label':
+                    self.result_label.config(text=msg[1], fg=msg[2])
                 elif msg[0] == 'error':
                     messagebox.showerror("錯誤", msg[1])
         except queue.Empty:
@@ -68,12 +57,16 @@ class GitBranchDeleter:
             self.root.after(100, self.process_queue)
 
     def setup_ui(self):
+        # 創建一個主框架來包含所有內容
+        main_frame = tk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
         # 選擇資料夾按鈕
-        select_folder_btn = tk.Button(self.root, text="選擇資料夾", command=self.choose_folder)
+        select_folder_btn = tk.Button(main_frame, text="選擇資料夾", command=self.choose_folder)
         select_folder_btn.pack(pady=10)
 
         # 資料夾列表 Listbox
-        self.folder_listbox = Listbox(self.root, selectmode=tk.SINGLE, exportselection=False, height=5)
+        self.folder_listbox = Listbox(main_frame, selectmode=tk.SINGLE, exportselection=False, height=5)
         self.folder_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         scrollbar = Scrollbar(self.folder_listbox, orient=tk.VERTICAL)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -82,29 +75,31 @@ class GitBranchDeleter:
         self.folder_listbox.bind('<ButtonRelease-1>', self.set_target_folder)
             
         # 新增右鍵選單
-        self.folder_menu = tk.Menu(self.root, tearoff=0)
+        self.folder_menu = tk.Menu(main_frame, tearoff=0)
         self.folder_menu.add_command(label="刪除", command=self.delete_folder)
         self.folder_listbox.bind('<Button-3>', self.show_folder_menu)
 
         # 目標資料夾的分支列表 Listbox
-        self.branch_listbox = Listbox(self.root, selectmode=tk.EXTENDED, exportselection=False, height=15)
+        self.branch_listbox = Listbox(main_frame, selectmode=tk.EXTENDED, exportselection=False, height=15)
         self.branch_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         scrollbar2 = Scrollbar(self.branch_listbox, orient=tk.VERTICAL)
         scrollbar2.pack(side=tk.RIGHT, fill=tk.Y)
         self.branch_listbox.config(yscrollcommand=scrollbar2.set)
         scrollbar2.config(command=self.branch_listbox.yview)
 
-        # 刪除分支按鈕
-        delete_branch_btn = tk.Button(self.root, text="刪除所選分支", command=self.delete_selected_branches)
-        delete_branch_btn.pack(pady=10)
+        # 刪除和推送按鈕放在同一列
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(pady=10)
+        
+        delete_branch_btn = tk.Button(button_frame, text="刪除所選分支", command=self.delete_selected_branches)
+        delete_branch_btn.pack(side=tk.LEFT, padx=20)
 
-        # 新增推送分支按鈕
-        push_branch_btn = tk.Button(self.root, text="推送所選分支", command=self.push_selected_branches)
-        push_branch_btn.pack(pady=10)
-            
-        # 新增顯示推送結果標籤
-        self.push_result_label = tk.Label(self.root, text="", fg="green")
-        self.push_result_label.pack(pady=5)
+        push_branch_btn = tk.Button(button_frame, text="推送所選分支", command=self.push_selected_branches)
+        push_branch_btn.pack(side=tk.LEFT, padx=20)
+
+        # 結果標籤
+        self.result_label = tk.Label(main_frame, text="", fg="green", wraplength=500)
+        self.result_label.pack(pady=5, fill=tk.X)
 
         # 視窗關閉事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -123,11 +118,28 @@ class GitBranchDeleter:
                 folder_path = self.folder_list[folder_index]
 
                 repo = git.Repo(folder_path)
+                deleted_branches = []
+                failed_branches = []
+
                 for index in selected_indices:
                     branch_name = self.branch_listbox.get(index)
                     if branch_name.startswith("*"):
                         continue  # 如果分支名稱以 * 開頭，代表是目前的分支，跳過刪除操作
-                    repo.git.branch("-D", branch_name)
+
+                    try:
+                        repo.git.branch("-D", branch_name)
+                        deleted_branches.append(branch_name)
+                    except git.exc.GitCommandError:
+                        failed_branches.append(branch_name)
+            
+                if deleted_branches and not failed_branches:
+                    self.queue.put(('update_result_label', f"成功刪除分支: {', '.join(deleted_branches)}", "green"))
+                elif failed_branches and not deleted_branches:
+                    self.queue.put(('update_result_label', f"刪除失敗分支: {', '.join(failed_branches)}", "red"))
+                elif deleted_branches and failed_branches:
+                    self.queue.put(('update_result_label', 
+                        f"成功刪除分支: {', '.join(deleted_branches)}\n刪除失敗分支: {', '.join(failed_branches)}", 
+                        "orange"))
                 
                 self.queue.put(('delete', folder_path))
             except Exception as e:
@@ -157,7 +169,14 @@ class GitBranchDeleter:
                     except git.exc.GitCommandError as e:
                         failed_branches.append(branch_name)
 
-                self.queue.put(('push_result', success_branches, failed_branches))
+                if success_branches and not failed_branches:
+                    self.queue.put(('update_result_label', f"成功推送分支: {', '.join(success_branches)}", "green"))
+                elif failed_branches and not success_branches:
+                    self.queue.put(('update_result_label', f"推送失敗分支: {', '.join(failed_branches)}", "red"))
+                elif success_branches and failed_branches:
+                    self.queue.put(('update_result_label',
+                        f"成功推送分支: {', '.join(success_branches)}\n失敗分支: {', '.join(failed_branches)}",
+                        "orange"))
             except Exception as e:
                 self.queue.put(('error', str(e)))
 
