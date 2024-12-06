@@ -103,9 +103,6 @@ class GitBranchDeleter:
 
         # 視窗關閉事件
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        # 綁定視窗大小變化事件
-        self.root.bind("<Configure>", self.on_resize)
 
     def delete_selected_branches(self):
         def delete_branches_thread():
@@ -274,11 +271,6 @@ class GitBranchDeleter:
                 self.update_folder_listbox()
         except FileNotFoundError:
             pass
-
-    def on_resize(self, event):
-        # 視窗大小變化時，調整 Listbox 和按鈕的大小
-        self.folder_listbox.config(width=self.root.winfo_width() // 2)
-        self.branch_listbox.config(width=self.root.winfo_width() // 2)
 
 if __name__ == "__main__":
     root = tk.Tk()
